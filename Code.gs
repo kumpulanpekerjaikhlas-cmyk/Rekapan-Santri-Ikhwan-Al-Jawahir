@@ -1,0 +1,64 @@
+const APP = {
+  NAME: 'Rekapitulasi Hafalan Santri Ikhwan Al-Jawahir',
+  TZ: 'Asia/Jakarta',
+  SS_ID_KEY: 'SPREADSHEET_ID',
+  SHEETS: {
+    Kelas: ['id','nama','guruId','aktif','createdAt','updatedAt'],
+    Guru: ['id','nama','email','aktif','createdAt','updatedAt'],
+    Santri: ['id','nis','nama','kelasId','aktif','createdAt','updatedAt'],
+    Kitab: ['id','nama','keterangan','aktif','createdAt','updatedAt'],
+    Surah: ['id','nomor','nama','jumlahAyat','aktif'],
+    Pengguna: ['id','email','nama','peran','aktif','createdAt','updatedAt'],
+    Hafalan_AlQuran: ['id','santriId','kelasId','surahId','ayat','pekan','bulan','tahun','tahunAjaran','createdAt','updatedAt','createdBy'],
+    Hafalan_Kitab: ['id','santriId','kelasId','kitabId','bab','bait','pekan','bulan','tahun','tahunAjaran','createdAt','updatedAt','createdBy'],
+    Hanca_Mengaji: ['id','kelasId','guruId','kitabId','bab','bait','halaman','pekan','bulan','tahun','tahunAjaran','createdAt','updatedAt','updatedBy'],
+    Log_Aktivitas: ['id','userId','userName','aktivitas','entitas','entitasId','waktu','sebelum','sesudah'],
+    Pengaturan: ['kunci','nilai','keterangan']
+  }
+};
+
+const INITIAL_CLASSES = [
+ ['7A','Ust. Suryadi Lesmana'],['7B','Ust. M. Rizqi Abdul Ghoni'],['7C','Ust. Roihan Abdul Majid'],['7D','Ust. Alif Mukhtar Hafidzin'],
+ ['8 Intensif','Ust. Aceng Fajri Muhammad Satibi, S.Pd.'],['8A','Ust. Sofwan Ansori'],['8B','Ust. Ade Salman Muhammad Al-Farisi, S.Pd.'],['8C','Ust. Fauzi Maulana'],
+ ['8D','Ust. M. Isman Musthofa'],['9A','Ust. Hafidz Abdul Aziz, S.Pd.'],['9B','Ust. Aang Nur Hidayat'],['9C','Ust. Dani Hamdani, S.Pd.'],
+ ['10A Qodim','Ust. Yadi Supriyadi'],['10B Qodim','Ust. Rahman Ginanjar'],['10 Jadid','Ust. Dede Nurdiana, S.Pd.'],['11 Qodim','Dr. KH. M. Matin Shopwan Amarullah, M.Pd.'],['11 Jadid','Ust. Ajril Ahmad Fatoni'],['12','Drs. KH. Mamat Saepul Qodir, M.Si.']
+];
+const SURAHS = ['Al-Fatihah','Al-Baqarah','Ali Imran','An-Nisa','Al-Maidah','Al-Anam','Al-Araf','Al-Anfal','At-Taubah','Yunus','Hud','Yusuf','Ar-Rad','Ibrahim','Al-Hijr','An-Nahl','Al-Isra','Al-Kahf','Maryam','Ta-Ha','Al-Anbiya','Al-Hajj','Al-Muminun','An-Nur','Al-Furqan','Ash-Shuara','An-Naml','Al-Qasas','Al-Ankabut','Ar-Rum','Luqman','As-Sajdah','Al-Ahzab','Saba','Fatir','Ya-Sin','As-Saffat','Sad','Az-Zumar','Ghafir','Fussilat','Ash-Shura','Az-Zukhruf','Ad-Dukhan','Al-Jathiyah','Al-Ahqaf','Muhammad','Al-Fath','Al-Hujurat','Qaf','Adh-Dhariyat','At-Tur','An-Najm','Al-Qamar','Ar-Rahman','Al-Waqiah','Al-Hadid','Al-Mujadilah','Al-Hashr','Al-Mumtahanah','As-Saff','Al-Jumah','Al-Munafiqun','At-Taghabun','At-Talaq','At-Tahrim','Al-Mulk','Al-Qalam','Al-Haqqah','Al-Maarij','Nuh','Al-Jinn','Al-Muzzammil','Al-Muddaththir','Al-Qiyamah','Al-Insan','Al-Mursalat','An-Naba','An-Naziat','Abasa','At-Takwir','Al-Infitar','Al-Mutaffifin','Al-Inshiqaq','Al-Buruj','At-Tariq','Al-Ala','Al-Ghashiyah','Al-Fajr','Al-Balad','Ash-Shams','Al-Lail','Ad-Duha','Ash-Sharh','At-Tin','Al-Alaq','Al-Qadr','Al-Bayyinah','Az-Zalzalah','Al-Adiyat','Al-Qariah','At-Takathur','Al-Asr','Al-Humazah','Al-Fil','Quraisy','Al-Maun','Al-Kauthar','Al-Kafirun','An-Nasr','Al-Masad','Al-Ikhlas','Al-Falaq','An-Nas'];
+
+function doGet() { return HtmlService.createTemplateFromFile('Index').evaluate().setTitle(APP.NAME).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); }
+function include(name) { return HtmlService.createHtmlOutputFromFile(name).getContent(); }
+function uid(prefix) { return (prefix || 'ID') + '-' + Utilities.getUuid().split('-')[0].toUpperCase() + '-' + Date.now().toString(36).toUpperCase(); }
+function now() { return Utilities.formatDate(new Date(), APP.TZ, 'yyyy-MM-dd HH:mm:ss'); }
+function getSS_() { const id = PropertiesService.getScriptProperties().getProperty(APP.SS_ID_KEY); if (!id) throw new Error('SPREADSHEET_ID belum dikonfigurasi. Jalankan setSpreadsheetId(id) terlebih dahulu.'); return SpreadsheetApp.openById(id); }
+function setSpreadsheetId(id) { if (!id || !/^[a-zA-Z0-9_-]{20,}$/.test(id)) throw new Error('ID Spreadsheet tidak valid.'); PropertiesService.getScriptProperties().setProperty(APP.SS_ID_KEY, id); return initDatabase(); }
+function setupSpreadsheetId() { return 'Jalankan setSpreadsheetId("ID_SPREADSHEET_ANDA") dari editor Apps Script.'; }
+function sh_(name) { const s=getSS_().getSheetByName(name); if(!s) throw new Error('Sheet tidak ditemukan: '+name); return s; }
+function rows_(name) { const s=sh_(name), v=s.getDataRange().getValues(); if(v.length<2)return []; return v.slice(1).map(r=>{const o={}; APP.SHEETS[name].forEach((h,i)=>o[h]=r[i] === undefined ? '' : r[i]); return o;}); }
+function writeRows_(name, data) { const s=sh_(name); if(s.getLastRow()>1)s.getRange(2,1,s.getLastRow()-1,s.getLastColumn()).clearContent(); if(data.length)s.getRange(2,1,data.length,APP.SHEETS[name].length).setValues(data.map(o=>APP.SHEETS[name].map(h=>o[h] ?? ''))); }
+function initDatabase() {
+  const ss=getSS_(); Object.keys(APP.SHEETS).forEach(name=>{let s=ss.getSheetByName(name);if(!s)s=ss.insertSheet(name);s.getRange(1,1,1,APP.SHEETS[name].length).setValues([APP.SHEETS[name]]);s.setFrozenRows(1);s.getRange(1,1,1,s.getLastColumn()).setFontWeight('bold').setBackground('#0b5d3b').setFontColor('#ffffff');});
+  if(!rows_('Kelas').length){const t=now(), gs={}, data=[];INITIAL_CLASSES.forEach(x=>{const gid=uid('GURU');gs[x[1]]=gid;data.push({id:uid('KLS'),nama:x[0],guruId:gid,aktif:true,createdAt:t,updatedAt:t});});writeRows_('Guru',INITIAL_CLASSES.map(x=>({id:gs[x[1]],nama:x[1],email:'',aktif:true,createdAt:t,updatedAt:t})));writeRows_('Kelas',data);}
+  if(!rows_('Surah').length)writeRows_('Surah',SURAHS.map((n,i)=>({id:'S-'+String(i+1).padStart(3,'0'),nomor:i+1,nama:n,jumlahAyat:'',aktif:true})));
+  const settings=rows_('Pengaturan'); if(!settings.length)writeRows_('Pengaturan',[{kunci:'TAHUN_AJARAN_AKTIF',nilai:'2026/2027',keterangan:'Tahun ajaran aktif'},{kunci:'TANGGAL_AWAL_AJARAN',nilai:'2026-07-01',keterangan:'Tanggal awal'},{kunci:'TANGGAL_AKHIR_AJARAN',nilai:'2027-06-30',keterangan:'Tanggal akhir'}]);
+  const email=Session.getEffectiveUser().getEmail()||''; if(email&&!rows_('Pengguna').some(u=>u.email===email)){const t=now();append_('Pengguna',{id:uid('USR'),email:email,nama:email,peran:'ADMIN',aktif:true,createdAt:t,updatedAt:t});}
+  return {ok:true,message:'Database siap.',sheets:Object.keys(APP.SHEETS)};
+}
+function currentUser_(){const email=(Session.getActiveUser().getEmail()||Session.getEffectiveUser().getEmail()||'').toLowerCase(); const users=rows_('Pengguna'); let u=users.find(x=>String(x.email).toLowerCase()===email&&String(x.aktif)!=='false'); if(!u&&users.length===0){u={id:'SYSTEM',email:email,nama:email||'Administrator',peran:'ADMIN',aktif:true};} if(!u)throw new Error('Akun belum terdaftar atau tidak aktif: '+email); return u;}
+function requireRole_(roles){const u=currentUser_();if(roles&&roles.indexOf(String(u.peran).toUpperCase())<0)throw new Error('Akses ditolak untuk peran '+u.peran);return u;}
+function append_(name,o){const s=sh_(name);s.appendRow(APP.SHEETS[name].map(h=>o[h]??''));return o;}
+function log_(activity,entity,id,before,after,u){append_('Log_Aktivitas',{id:uid('LOG'),userId:u.id,userName:u.nama,aktivitas:activity,entitas:entity,entitasId:id,waktu:now(),sebelum:before?JSON.stringify(before):'',sesudah:after?JSON.stringify(after):''});}
+function apiBootstrap(){initDatabase();const u=currentUser_();return {user:u,master:{kelas:rows_('Kelas').filter(x=>String(x.aktif)!=='false'),guru:rows_('Guru').filter(x=>String(x.aktif)!=='false'),santri:rows_('Santri'),kitab:rows_('Kitab').filter(x=>String(x.aktif)!=='false'),surah:rows_('Surah').filter(x=>String(x.aktif)!=='false'),pengguna: u.peran==='ADMIN'?rows_('Pengguna'):[]},settings:rows_('Pengaturan')};}
+function saveEntity(name,obj){requireRole_(['ADMIN','GURU']);if(!APP.SHEETS[name])throw new Error('Entitas tidak valid');const u=currentUser_(), lock=LockService.getScriptLock();lock.waitLock(10000);try{const all=rows_(name), t=now(); if(!obj.id)obj.id=uid(name.substring(0,3).toUpperCase()); const old=all.find(x=>x.id===obj.id); const clean={};APP.SHEETS[name].forEach(h=>clean[h]=obj[h]??(old?old[h]:''));clean.updatedAt= t;if(!old){clean.createdAt=t;append_(name,clean);}else{const s=sh_(name),idx=all.findIndex(x=>x.id===obj.id)+2;s.getRange(idx,1,1,APP.SHEETS[name].length).setValues([APP.SHEETS[name].map(h=>clean[h]??'')]);}log_(old?'UPDATE':'CREATE',name,clean.id,old,clean,u);return clean;}finally{lock.releaseLock();}}
+function deleteEntity(name,id){requireRole_(['ADMIN']);if(['Hafalan_AlQuran','Hafalan_Kitab','Hanca_Mengaji'].indexOf(name)<0)throw new Error('Penghapusan langsung hanya untuk catatan transaksi.');const u=currentUser_(),all=rows_(name),old=all.find(x=>x.id===id);if(!old)throw new Error('Data tidak ditemukan');const s=sh_(name),i=all.findIndex(x=>x.id===id)+2;s.deleteRow(i);log_('DELETE',name,id,old,null,u);return true;}
+function saveQuran(o){requireRole_(['ADMIN','GURU']);validatePeriod_(o);const san=rows_('Santri').find(x=>x.id===o.santriId);if(!san||String(san.aktif)==='false')throw new Error('Santri tidak aktif/tidak ditemukan');if(san.kelasId!==o.kelasId)throw new Error('Kelas santri tidak sesuai');if(!o.surahId||!o.ayat)throw new Error('Surah dan nomor ayat wajib diisi');return saveEntity('Hafalan_AlQuran',o);}
+function saveKitab(o){requireRole_(['ADMIN','GURU']);validatePeriod_(o);if(!o.santriId||!o.kitabId)throw new Error('Santri dan kitab wajib diisi');return saveEntity('Hafalan_Kitab',o);}
+function saveHanca(o){requireRole_(['ADMIN','GURU']);validatePeriod_(o);const all=rows_('Hanca_Mengaji');const same=all.find(x=>x.kelasId===o.kelasId&&x.kitabId===o.kitabId&&String(x.pekan)===String(o.pekan)&&String(x.bulan)===String(o.bulan)&&String(x.tahun)===String(o.tahun)&&x.id!==o.id);if(same)o.id=same.id;return saveEntity('Hanca_Mengaji',o);}
+function validatePeriod_(o){const p=Number(o.pekan),m=Number(o.bulan),y=Number(o.tahun);if(p<1||p>5||m<1||m>12||y<2020||y>2100)throw new Error('Periode tidak valid.');if(p===5&&!hasFriday5_(y,m))throw new Error('Bulan tersebut tidak memiliki Jumat kelima.');}
+function hasFriday5_(y,m){let n=0,d=new Date(y,m-1,1);while(d.getMonth()===m-1){if(d.getDay()===5)n++;d.setDate(d.getDate()+1);}return n>=5;}
+function periodWeeks(y,m){return {weeks:[1,2,3,4].concat(hasFriday5_(y,m)?[5]:[]),label:'Bulan '+m+' '+y};}
+function getData(kind,filters){requireRole_(['ADMIN','GURU','SANTRI']);filters=filters||{};let name=kind==='quran'?'Hafalan_AlQuran':kind==='kitab'?'Hafalan_Kitab':'Hanca_Mengaji';let data=rows_(name);if(filters.bulan)data=data.filter(x=>String(x.bulan)===String(filters.bulan));if(filters.tahun)data=data.filter(x=>String(x.tahun)===String(filters.tahun));if(filters.pekan)data=data.filter(x=>String(x.pekan)===String(filters.pekan));if(filters.kelasId)data=data.filter(x=>x.kelasId===filters.kelasId);if(kind==='quran'||kind==='kitab'){const u=currentUser_();if(u.peran==='SANTRI')data=data.filter(x=>x.santriId===u.santriId);}return data;}
+function dashboard(filters){requireRole_(['ADMIN','GURU']);filters=filters||{};const q=getData('quran',filters),k=getData('kitab',filters),h=getData('hanca',filters);return {kelas:rows_('Kelas').filter(x=>String(x.aktif)!=='false').length,guru:rows_('Guru').filter(x=>String(x.aktif)!=='false').length,santri:rows_('Santri').filter(x=>String(x.aktif)!=='false').length,kitab:rows_('Kitab').filter(x=>String(x.aktif)!=='false').length,quran:q.length,kitabSetoran:k.length,hancaClasses:[...new Set(h.map(x=>x.kelasId))].length,activity:rows_('Log_Aktivitas').slice(-10).reverse()};}
+function report(type,filters){requireRole_(['ADMIN','GURU','SANTRI']);filters=filters||{};const kind=type.indexOf('quran')>=0?'quran':type.indexOf('kitab')>=0?'kitab':'hanca';const data=getData(kind,filters), classes=rows_('Kelas'),santri=rows_('Santri'),kitab=rows_('Kitab'),surah=rows_('Surah'),guru=rows_('Guru');const lookup=(arr,id,key)=>{const x=arr.find(a=>a.id===id);return x?x[key]||x.nama||id:id;};if(kind==='hanca')return data.map(x=>({...x,kelas:lookup(classes,x.kelasId,'nama'),guru:lookup(guru,x.guruId,'nama'),kitab:lookup(kitab,x.kitabId,'nama')}));return data.map(x=>({...x,namaSantri:lookup(santri,x.santriId,'nama'),kelas:lookup(classes,x.kelasId,'nama'),detail:kind==='quran'?lookup(surah,x.surahId,'nama')+' — ayat '+x.ayat:lookup(kitab,x.kitabId,'nama')+' — '+x.bab+' — bait '+x.bait}));}
+function getLogs(){requireRole_(['ADMIN']);return rows_('Log_Aktivitas').slice(-500).reverse();}
+function getUsers(){requireRole_(['ADMIN']);return rows_('Pengguna');}
+function saveSetting(k,v){requireRole_(['ADMIN']);const all=rows_('Pengaturan'),o=all.find(x=>x.kunci===k),s=sh_('Pengaturan');if(o){const i=all.indexOf(o)+2;s.getRange(i,1,1,3).setValues([[k,v,o.keterangan]]);}else append_('Pengaturan',{kunci:k,nilai:v,keterangan:''});return true;}
